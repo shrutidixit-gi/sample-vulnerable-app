@@ -84,4 +84,6 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp: 0.0.0.0/0                     # Issue 4: SSH open to the world
+          # FIX: Restricted SSH access from 0.0.0.0/0 to a more secure CIDR range
+          # Replace 10.0.0.0/8 with your organization's specific IP range or VPN CIDR
+          CidrIp: 10.0.0.0/8                    # Restricted to private network range instead of 0.0.0.0/0
