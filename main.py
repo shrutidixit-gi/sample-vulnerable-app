@@ -16,14 +16,15 @@ cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username 
 conn.commit()
 
 def add_user(username, password):
-    # SQL injection vulnerability via string formatting (Issue 3)
-    sql = "INSERT INTO users (username, password) VALUES ('%s', '%s')" % (username, password)
-    cur.execute(sql)
+    # FIX: Use parameterized query to prevent SQL injection (CWE-89)
+    # Parameterized queries separate SQL logic from data, preventing malicious input from altering query structure
+    sql = "INSERT INTO users (username, password) VALUES (?, ?)"
+    cur.execute(sql, (username, password))
     conn.commit()
 
 def get_user(username):
-    # FIX: SQL injection remediated - using parameterized query instead of string formatting
-    # Parameterized queries prevent SQL injection by separating SQL logic from user input
+    # FIX: Use parameterized query to prevent SQL injection (CWE-89)
+    # The placeholder (?) ensures user input is treated as data, not executable SQL code
     q = "SELECT id, username FROM users WHERE username = ?"
     cur.execute(q, (username,))
     return cur.fetchall()
