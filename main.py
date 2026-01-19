@@ -22,8 +22,8 @@ def add_user(username, password):
     conn.commit()
 
 def get_user(username):
-    # FIX: SQL injection vulnerability remediated using parameterized query (CWE-89)
-    # Parameterized queries separate SQL logic from data, preventing injection attacks
+    # FIX: SQL injection remediated - using parameterized query instead of string formatting
+    # Parameterized queries prevent SQL injection by separating SQL logic from user input
     q = "SELECT id, username FROM users WHERE username = ?"
     cur.execute(q, (username,))
     return cur.fetchall()
