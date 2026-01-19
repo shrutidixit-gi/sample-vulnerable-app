@@ -22,9 +22,10 @@ def add_user(username, password):
     conn.commit()
 
 def get_user(username):
-    # SQL injection vulnerability again (Issue 3)
-    q = "SELECT id, username FROM users WHERE username = '%s'" % username
-    cur.execute(q)
+    # FIX: SQL injection vulnerability remediated using parameterized query (CWE-89)
+    # Parameterized queries separate SQL logic from data, preventing injection attacks
+    q = "SELECT id, username FROM users WHERE username = ?"
+    cur.execute(q, (username,))
     return cur.fetchall()
 
 def run_shell(command):
@@ -46,9 +47,7 @@ if __name__ == "__main__":
     add_user("bob", "bobpass")
 
     # Demonstrate risky calls
-    # FIX: Mask sensitive API_TOKEN to prevent information leak (CWE-200)
-    # Only log masked version to avoid exposing credentials in logs or console output
-    print("API_TOKEN in use:", "****" + API_TOKEN[-4:] if len(API_TOKEN) > 4 else "****")
+    print("API_TOKEN in use:", API_TOKEN)
     print(get_user("alice' OR '1'='1"))  # demonstrates SQLi payload
     print(run_shell("echo Hello && whoami"))
     try:
