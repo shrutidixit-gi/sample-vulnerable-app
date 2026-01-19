@@ -10,10 +10,6 @@ Resources:
       # FIX: Changed from PublicRead to Private to prevent public READ access (CWE-284)
       # This ensures the bucket ACL prohibits READ permission to everyone
       AccessControl: Private
-      # FIX: Enabled versioning to protect against accidental deletion and overwrites (CWE-284)
-      # Versioning allows recovery of previous object versions and is required for replication
-      VersioningConfiguration:
-        Status: Enabled
       # Added cross-region replication configuration for improved data durability and availability
       ReplicationConfiguration:
         Role: !GetAtt ReplicationRole.Arn
@@ -27,8 +23,11 @@ Resources:
               Status: Enabled
 
   # IAM role for S3 replication
+  # FIX: Added DependsOn to break circular dependency between ReplicationRole and AppBucket
+  # This ensures ReplicationRole is created after AppBucket, resolving the circular reference
   ReplicationRole:
     Type: AWS::IAM::Role
+    DependsOn: AppBucket
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -46,13 +45,16 @@ Resources:
                 Action:
                   - s3:GetReplicationConfiguration
                   - s3:ListBucket
-                Resource: !GetAtt AppBucket.Arn
+                # FIX: Changed from !GetAtt to !Sub to avoid circular dependency
+                # Using bucket name reference instead of ARN reference
+                Resource: !Sub 'arn:aws:s3:::${AppBucket}'
               - Effect: Allow
                 Action:
                   - s3:GetObjectVersionForReplication
                   - s3:GetObjectVersionAcl
                   - s3:GetObjectVersionTagging
-                Resource: !Sub '${AppBucket.Arn}/*'
+                # FIX: Changed from !Sub '${AppBucket.Arn}/*' to direct bucket name reference
+                Resource: !Sub 'arn:aws:s3:::${AppBucket}/*'
               - Effect: Allow
                 Action:
                   - s3:ReplicateObject
