@@ -10,14 +10,8 @@ Resources:
       # FIX: Changed from PublicRead to Private to prevent public READ access (CWE-284)
       # This ensures the bucket ACL prohibits READ permission to everyone
       AccessControl: Private
-      # FIX: Added BucketEncryption with AWS KMS to encrypt S3 bucket at rest
-      # This ensures data is encrypted using AWS Key Management Service for enhanced security
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: aws:kms
-              KMSMasterKeyID: !GetAtt S3EncryptionKey.Arn
-            BucketKeyEnabled: true
+      # FIX: Enabled S3 Object Lock to prevent deletion or overwriting for compliance and data integrity
+      ObjectLockEnabled: true
       # Added cross-region replication configuration for improved data durability and availability
       ReplicationConfiguration:
         Role: !GetAtt ReplicationRole.Arn
@@ -29,29 +23,6 @@ Resources:
             Priority: 1
             DeleteMarkerReplication:
               Status: Enabled
-
-  # KMS key for S3 bucket encryption
-  S3EncryptionKey:
-    Type: AWS::KMS::Key
-    Properties:
-      Description: KMS key for S3 bucket encryption
-      KeyPolicy:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: Enable IAM User Permissions
-            Effect: Allow
-            Principal:
-              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
-            Action: 'kms:*'
-            Resource: '*'
-          - Sid: Allow S3 to use the key
-            Effect: Allow
-            Principal:
-              Service: s3.amazonaws.com
-            Action:
-              - 'kms:Decrypt'
-              - 'kms:GenerateDataKey'
-            Resource: '*'
 
   # IAM role for S3 replication
   ReplicationRole:
