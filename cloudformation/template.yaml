@@ -10,6 +10,14 @@ Resources:
       # FIX: Changed from PublicRead to Private to prevent public READ access (CWE-284)
       # This ensures the bucket ACL prohibits READ permission to everyone
       AccessControl: Private
+      # FIX: Added BucketEncryption with AWS KMS to encrypt S3 bucket at rest
+      # This ensures data is encrypted using AWS Key Management Service for enhanced security
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt S3EncryptionKey.Arn
+            BucketKeyEnabled: true
       # Added cross-region replication configuration for improved data durability and availability
       ReplicationConfiguration:
         Role: !GetAtt ReplicationRole.Arn
@@ -22,12 +30,32 @@ Resources:
             DeleteMarkerReplication:
               Status: Enabled
 
+  # KMS key for S3 bucket encryption
+  S3EncryptionKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for S3 bucket encryption
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow S3 to use the key
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+            Resource: '*'
+
   # IAM role for S3 replication
-  # FIX: Added DependsOn to break circular dependency between ReplicationRole and AppBucket
-  # This ensures ReplicationRole is created after AppBucket, resolving the circular reference
   ReplicationRole:
     Type: AWS::IAM::Role
-    DependsOn: AppBucket
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -45,16 +73,13 @@ Resources:
                 Action:
                   - s3:GetReplicationConfiguration
                   - s3:ListBucket
-                # FIX: Changed from !GetAtt to !Sub to avoid circular dependency
-                # Using bucket name reference instead of ARN reference
-                Resource: !Sub 'arn:aws:s3:::${AppBucket}'
+                Resource: !GetAtt AppBucket.Arn
               - Effect: Allow
                 Action:
                   - s3:GetObjectVersionForReplication
                   - s3:GetObjectVersionAcl
                   - s3:GetObjectVersionTagging
-                # FIX: Changed from !Sub '${AppBucket.Arn}/*' to direct bucket name reference
-                Resource: !Sub 'arn:aws:s3:::${AppBucket}/*'
+                Resource: !Sub '${AppBucket.Arn}/*'
               - Effect: Allow
                 Action:
                   - s3:ReplicateObject
