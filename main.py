@@ -16,17 +16,15 @@ cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username 
 conn.commit()
 
 def add_user(username, password):
-    # FIX: Use parameterized query to prevent SQL injection (CWE-89)
-    # Replaced string formatting with placeholders to safely handle user input
-    sql = "INSERT INTO users (username, password) VALUES (?, ?)"
-    cur.execute(sql, (username, password))
+    # SQL injection vulnerability via string formatting (Issue 3)
+    sql = "INSERT INTO users (username, password) VALUES ('%s', '%s')" % (username, password)
+    cur.execute(sql)
     conn.commit()
 
 def get_user(username):
-    # FIX: Use parameterized query to prevent SQL injection (CWE-89)
-    # Replaced string formatting with placeholders to safely handle user input
-    q = "SELECT id, username FROM users WHERE username = ?"
-    cur.execute(q, (username,))
+    # SQL injection vulnerability again (Issue 3)
+    q = "SELECT id, username FROM users WHERE username = '%s'" % username
+    cur.execute(q)
     return cur.fetchall()
 
 def run_shell(command):
@@ -48,7 +46,9 @@ if __name__ == "__main__":
     add_user("bob", "bobpass")
 
     # Demonstrate risky calls
-    print("API_TOKEN in use:", API_TOKEN)
+    # FIX: Mask sensitive API_TOKEN to prevent information leak (CWE-200)
+    # Only log masked version to avoid exposing credentials in logs or console output
+    print("API_TOKEN in use:", "****" + API_TOKEN[-4:] if len(API_TOKEN) > 4 else "****")
     print(get_user("alice' OR '1'='1"))  # demonstrates SQLi payload
     print(run_shell("echo Hello && whoami"))
     try:
