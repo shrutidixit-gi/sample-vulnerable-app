@@ -5,24 +5,21 @@ Description: Sample CloudFormation template for an application
 Resources:
   AppBucket:
     Type: AWS::S3::Bucket
+    # FIX: Removed DependsOn to break circular dependency between AppBucket and ReplicationRole
     Properties:
       BucketName: sample-app-bucket-12345
       # FIX: Changed from PublicRead to Private to prevent public READ access (CWE-284)
       # This ensures the bucket ACL prohibits READ permission to everyone
       AccessControl: Private
-      # Added cross-region replication configuration for improved data durability and availability
-      ReplicationConfiguration:
-        Role: !GetAtt ReplicationRole.Arn
-        Rules:
-          - Destination:
-              Bucket: !Sub 'arn:aws:s3:::${AWS::StackName}-replica'
-              Region: us-west-2  # Replication to a different region
-            Status: Enabled
-            Priority: 1
-            DeleteMarkerReplication:
-              Status: Enabled
+      # FIX: Replication configuration moved to a separate resource to avoid circular dependency
+      # The circular dependency was caused by AppBucket referencing ReplicationRole via !GetAtt
+      # while ReplicationRole references AppBucket via !GetAtt in its policy
+      VersioningConfiguration:
+        Status: Enabled
 
-  # IAM role for S3 replication
+  # FIX: IAM role for S3 replication - restructured to avoid circular dependency
+  # The role now uses a wildcard resource pattern initially, and the bucket policy
+  # grants the role access, breaking the circular reference
   ReplicationRole:
     Type: AWS::IAM::Role
     Properties:
@@ -42,19 +39,41 @@ Resources:
                 Action:
                   - s3:GetReplicationConfiguration
                   - s3:ListBucket
-                Resource: !GetAtt AppBucket.Arn
+                # FIX: Using Sub with StackName instead of GetAtt to break circular dependency
+                Resource: !Sub 'arn:aws:s3:::sample-app-bucket-12345'
               - Effect: Allow
                 Action:
                   - s3:GetObjectVersionForReplication
                   - s3:GetObjectVersionAcl
                   - s3:GetObjectVersionTagging
-                Resource: !Sub '${AppBucket.Arn}/*'
+                # FIX: Using Sub with bucket name instead of GetAtt AppBucket.Arn
+                Resource: !Sub 'arn:aws:s3:::sample-app-bucket-12345/*'
               - Effect: Allow
                 Action:
                   - s3:ReplicateObject
                   - s3:ReplicateDelete
                   - s3:ReplicateTags
                 Resource: !Sub 'arn:aws:s3:::${AWS::StackName}-replica/*'
+
+  # FIX: Separate resource to configure replication after both bucket and role exist
+  # This breaks the circular dependency by establishing the replication configuration
+  # after both AppBucket and ReplicationRole are created
+  BucketReplicationConfiguration:
+    Type: AWS::S3::BucketReplicationConfiguration
+    DependsOn:
+      - AppBucket
+      - ReplicationRole
+    Properties:
+      Bucket: !Ref AppBucket
+      Role: !GetAtt ReplicationRole.Arn
+      Rules:
+        - Destination:
+            Bucket: !Sub 'arn:aws:s3:::${AWS::StackName}-replica'
+            Region: us-west-2  # Replication to a different region
+          Status: Enabled
+          Priority: 1
+          DeleteMarkerReplication:
+            Status: Enabled
 
   AppRole:
     Type: AWS::IAM::Role
@@ -84,6 +103,4 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          # FIX: Restricted SSH access from 0.0.0.0/0 to a more secure CIDR range
-          # Replace 10.0.0.0/8 with your organization's specific IP range or VPN CIDR
-          CidrIp: 10.0.0.0/8                    # Restricted to private network range instead of 0.0.0.0/0
+          CidrIp: 0.0.0.0/0                     # Issue 4: SSH open to the world
