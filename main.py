@@ -4,9 +4,17 @@ import subprocess
 import pickle
 import os
 import ast  # FIX: Import ast for safe literal evaluation
+import logging
+
+# Configure logging with appropriate security level (do not log sensitive data)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # hardcoded API token (Issue 1)
-API_TOKEN = "AKIAEXAMPLERAWTOKEN12345"
+# FIX: Sensitive credential should be loaded from environment variables or secure vault, not hardcoded
+API_TOKEN = os.getenv("API_TOKEN", "")  # Load from environment; empty string if not set
+if not API_TOKEN:
+    logger.warning("API_TOKEN not configured. Set the API_TOKEN environment variable.")
 
 # simple SQLite DB on local disk (Issue 2: insecure storage + lack of access control)
 DB_PATH = "/tmp/app_users.db"
@@ -47,12 +55,15 @@ if __name__ == "__main__":
     add_user("alice", "alicepass")
     add_user("bob", "bobpass")
 
-    # Demonstrate risky calls
-    print("API_TOKEN in use:", API_TOKEN)
+    # FIX: Removed direct print of API_TOKEN to prevent sensitive information leak (CWE-200)
+    # Instead, log a safe message indicating the token is in use without exposing its value
+    logger.info("API_TOKEN configured and in use")
+    
     print(get_user("alice' OR '1'='1"))  # demonstrates SQLi payload
     print(run_shell("echo Hello && whoami"))
     try:
         # attempting to deserialize an arbitrary blob (will likely raise)
         deserialize_blob(b"not-a-valid-pickle")
     except Exception as e:
-        print("Deserialization error:", e)
+        # FIX: Log error without exposing sensitive details
+        logger.error("Deserialization error: %s", str(e))
