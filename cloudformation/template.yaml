@@ -14,6 +14,15 @@ Resources:
       # This prevents deletion or overwriting of objects for a specified retention period,
       # ensuring data integrity and compliance with regulatory requirements
       ObjectLockEnabled: true
+      # FIX: Added BucketEncryption with AWS KMS key for S3 bucket encryption
+      # This ensures all objects stored in the bucket are encrypted at rest using AWS KMS,
+      # providing centralized key management and compliance with security best practices
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt S3KMSKey.Arn
+            BucketKeyEnabled: true
       # Added cross-region replication configuration for improved data durability and availability
       ReplicationConfiguration:
         Role: !GetAtt ReplicationRole.Arn
@@ -26,6 +35,36 @@ Resources:
             Priority: 1
             DeleteMarkerReplication:
               Status: Enabled
+
+  # KMS Key for S3 bucket encryption
+  S3KMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for S3 bucket encryption
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow S3 to use the key
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+            Resource: '*'
+
+  # KMS Key Alias for easier reference
+  S3KMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/s3-bucket-encryption-key
+      TargetKeyId: !Ref S3KMSKey
 
   # IAM role for S3 replication
   ReplicationRole:
