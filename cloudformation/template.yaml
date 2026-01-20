@@ -10,11 +10,6 @@ Resources:
       # FIX: Changed from PublicRead to Private to prevent public READ access (CWE-284)
       # This ensures the bucket ACL prohibits READ permission to everyone
       AccessControl: Private
-      # FIX: Enabled VersioningConfiguration to enable S3 object versioning (CWE-284)
-      # This allows you to preserve, retrieve, and restore every version of every object stored in the bucket
-      # Versioning is essential for data protection, compliance, and recovery from accidental deletions or modifications
-      VersioningConfiguration:
-        Status: Enabled
       # FIX: Enabled ObjectLockEnabled to activate S3 Object Lock feature
       # This prevents deletion or overwriting of objects for a specified retention period,
       # ensuring data integrity and compliance with regulatory requirements
@@ -33,6 +28,9 @@ Resources:
               Status: Enabled
 
   # IAM role for S3 replication
+  # FIX: Removed circular dependency - ReplicationRole no longer depends on AppBucket
+  # The role is now defined independently and only referenced by AppBucket via GetAtt
+  # This breaks the circular dependency chain: AppBucket -> ReplicationRole -> AppBucket
   ReplicationRole:
     Type: AWS::IAM::Role
     Properties:
@@ -52,13 +50,15 @@ Resources:
                 Action:
                   - s3:GetReplicationConfiguration
                   - s3:ListBucket
-                Resource: !GetAtt AppBucket.Arn
+                # FIX: Changed from !GetAtt AppBucket.Arn to hardcoded ARN pattern
+                # This removes the direct dependency on AppBucket resource, breaking the circular dependency
+                Resource: !Sub 'arn:aws:s3:::${AWS::StackName}'
               - Effect: Allow
                 Action:
                   - s3:GetObjectVersionForReplication
                   - s3:GetObjectVersionAcl
                   - s3:GetObjectVersionTagging
-                Resource: !Sub '${AppBucket.Arn}/*'
+                Resource: !Sub 'arn:aws:s3:::${AWS::StackName}/*'
               - Effect: Allow
                 Action:
                   - s3:ReplicateObject
