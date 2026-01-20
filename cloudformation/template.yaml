@@ -16,7 +16,8 @@ Resources:
         Rules:
           - Destination:
               Bucket: !Sub 'arn:aws:s3:::${AWS::StackName}-replica'
-              Region: us-west-2  # Replication to a different region
+              # FIX: Removed 'Region' property - not allowed in ReplicationConfiguration Destination
+              # The region is inferred from the bucket ARN specified above
             Status: Enabled
             Priority: 1
             DeleteMarkerReplication:
