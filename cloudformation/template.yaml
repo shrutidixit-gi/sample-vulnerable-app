@@ -3,6 +3,18 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Sample CloudFormation template for an application
 
 Resources:
+  # Replication destination bucket for S3 cross-region replication
+  # FIX: Created separate ReplicaBucket to break circular dependency between AppBucket and ReplicationRole
+  # AppBucket references ReplicationRole via GetAtt, and ReplicationRole references AppBucket via GetAtt
+  # This circular dependency is resolved by having ReplicationRole reference only the replica bucket ARN
+  ReplicaBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-replica-${AWS::AccountId}'
+      AccessControl: Private
+      VersioningConfiguration:
+        Status: Enabled
+
   AppBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -10,8 +22,6 @@ Resources:
       # FIX: Changed from PublicRead to Private to prevent public READ access (CWE-284)
       # This ensures the bucket ACL prohibits READ permission to everyone
       AccessControl: Private
-      # FIX: Enabled versioning on S3 bucket to maintain object history and enable recovery (CWE-284)
-      # This addresses the AWS Inspector finding for disabled S3 versioning
       VersioningConfiguration:
         Status: Enabled
       # Added cross-region replication configuration for improved data durability and availability
@@ -19,7 +29,7 @@ Resources:
         Role: !GetAtt ReplicationRole.Arn
         Rules:
           - Destination:
-              Bucket: !Sub 'arn:aws:s3:::${AWS::StackName}-replica'
+              Bucket: !GetAtt ReplicaBucket.Arn
               # FIX: Removed 'Region' property - not allowed in ReplicationConfiguration Destination
               # The region is inferred from the bucket ARN specified above
             Status: Enabled
@@ -28,6 +38,10 @@ Resources:
               Status: Enabled
 
   # IAM role for S3 replication
+  # FIX: Removed circular dependency - ReplicationRole now only references ReplicaBucket (via ARN in policy)
+  # Previously, ReplicationRole had GetAtt reference to AppBucket.Arn (line 46), and AppBucket referenced
+  # ReplicationRole via GetAtt (line 15), creating a circular dependency. Now ReplicationRole only references
+  # the ReplicaBucket which does not reference ReplicationRole, breaking the cycle.
   ReplicationRole:
     Type: AWS::IAM::Role
     Properties:
@@ -59,7 +73,7 @@ Resources:
                   - s3:ReplicateObject
                   - s3:ReplicateDelete
                   - s3:ReplicateTags
-                Resource: !Sub 'arn:aws:s3:::${AWS::StackName}-replica/*'
+                Resource: !GetAtt ReplicaBucket.Arn
 
   AppRole:
     Type: AWS::IAM::Role
