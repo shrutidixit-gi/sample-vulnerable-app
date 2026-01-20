@@ -3,18 +3,6 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Sample CloudFormation template for an application
 
 Resources:
-  # Replication destination bucket for S3 cross-region replication
-  # FIX: Created separate ReplicaBucket to break circular dependency between AppBucket and ReplicationRole
-  # AppBucket references ReplicationRole via GetAtt, and ReplicationRole references AppBucket via GetAtt
-  # This circular dependency is resolved by having ReplicationRole reference only the replica bucket ARN
-  ReplicaBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub '${AWS::StackName}-replica-${AWS::AccountId}'
-      AccessControl: Private
-      VersioningConfiguration:
-        Status: Enabled
-
   AppBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -22,14 +10,21 @@ Resources:
       # FIX: Changed from PublicRead to Private to prevent public READ access (CWE-284)
       # This ensures the bucket ACL prohibits READ permission to everyone
       AccessControl: Private
-      VersioningConfiguration:
-        Status: Enabled
+      # FIX: Added BucketEncryption with AWS KMS to encrypt S3 bucket at rest
+      # This ensures all objects in the bucket are encrypted with a customer-managed KMS key
+      # Addresses AWS Inspector finding: S3 bucket must be encrypted with AWS KMS key
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt S3KMSKey.Arn
+            BucketKeyEnabled: true
       # Added cross-region replication configuration for improved data durability and availability
       ReplicationConfiguration:
         Role: !GetAtt ReplicationRole.Arn
         Rules:
           - Destination:
-              Bucket: !GetAtt ReplicaBucket.Arn
+              Bucket: !Sub 'arn:aws:s3:::${AWS::StackName}-replica'
               # FIX: Removed 'Region' property - not allowed in ReplicationConfiguration Destination
               # The region is inferred from the bucket ARN specified above
             Status: Enabled
@@ -37,11 +32,38 @@ Resources:
             DeleteMarkerReplication:
               Status: Enabled
 
+  # FIX: Added KMS key for S3 bucket encryption
+  # This customer-managed key provides centralized key management and encryption services
+  S3KMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for S3 bucket encryption
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow S3 to use the key
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey'
+            Resource: '*'
+
+  # FIX: Added KMS key alias for easier reference
+  S3KMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/s3-bucket-encryption-key
+      TargetKeyId: !Ref S3KMSKey
+
   # IAM role for S3 replication
-  # FIX: Removed circular dependency - ReplicationRole now only references ReplicaBucket (via ARN in policy)
-  # Previously, ReplicationRole had GetAtt reference to AppBucket.Arn (line 46), and AppBucket referenced
-  # ReplicationRole via GetAtt (line 15), creating a circular dependency. Now ReplicationRole only references
-  # the ReplicaBucket which does not reference ReplicationRole, breaking the cycle.
   ReplicationRole:
     Type: AWS::IAM::Role
     Properties:
@@ -73,7 +95,7 @@ Resources:
                   - s3:ReplicateObject
                   - s3:ReplicateDelete
                   - s3:ReplicateTags
-                Resource: !GetAtt ReplicaBucket.Arn
+                Resource: !Sub 'arn:aws:s3:::${AWS::StackName}-replica/*'
 
   AppRole:
     Type: AWS::IAM::Role
