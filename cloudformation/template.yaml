@@ -10,6 +10,10 @@ Resources:
       # FIX: Changed from PublicRead to Private to prevent public READ access (CWE-284)
       # This ensures the bucket ACL prohibits READ permission to everyone
       AccessControl: Private
+      # FIX: Enabled ObjectLockEnabled to activate S3 Object Lock feature
+      # This prevents deletion or overwriting of objects for a specified retention period,
+      # ensuring data integrity and compliance with regulatory requirements
+      ObjectLockEnabled: true
       # Added cross-region replication configuration for improved data durability and availability
       ReplicationConfiguration:
         Role: !GetAtt ReplicationRole.Arn
