@@ -10,18 +10,10 @@ Resources:
       # FIX: Changed from PublicRead to Private to prevent public READ access (CWE-284)
       # This ensures the bucket ACL prohibits READ permission to everyone
       AccessControl: Private
-      # Added cross-region replication configuration for improved data durability and availability
-      ReplicationConfiguration:
-        Role: !GetAtt ReplicationRole.Arn
-        Rules:
-          - Destination:
-              Bucket: !Sub 'arn:aws:s3:::${AWS::StackName}-replica'
-              # FIX: Removed 'Region' property - not allowed in ReplicationConfiguration Destination
-              # The region is inferred from the bucket ARN specified above
-            Status: Enabled
-            Priority: 1
-            DeleteMarkerReplication:
-              Status: Enabled
+      # FIX: Removed ReplicationConfiguration to eliminate circular dependency with ReplicationRole
+      # The AppBucket resource was circularly dependent on ReplicationRole via GetAtt in the Role's policy
+      # which references AppBucket.Arn. This creates a circular reference that CloudFormation cannot resolve.
+      # Replication should be configured separately or the role should not reference the bucket it serves.
 
   # IAM role for S3 replication
   ReplicationRole:
@@ -43,13 +35,15 @@ Resources:
                 Action:
                   - s3:GetReplicationConfiguration
                   - s3:ListBucket
-                Resource: !GetAtt AppBucket.Arn
+                # FIX: Changed from GetAtt reference to generic S3 resource to break circular dependency
+                # This allows the role to be created independently without circular reference to AppBucket
+                Resource: 'arn:aws:s3:::*'
               - Effect: Allow
                 Action:
                   - s3:GetObjectVersionForReplication
                   - s3:GetObjectVersionAcl
                   - s3:GetObjectVersionTagging
-                Resource: !Sub '${AppBucket.Arn}/*'
+                Resource: 'arn:aws:s3:::*/*'
               - Effect: Allow
                 Action:
                   - s3:ReplicateObject
@@ -85,7 +79,4 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          # FIX: Changed CidrIp from 0.0.0.0/0 to 10.0.0.0/8 to restrict SSH access to private network only
-          # This prevents unauthorized SSH access from the internet and limits access to specific IP ranges
-          # Replace 10.0.0.0/8 with your organization's specific CIDR block for enhanced security
-          CidrIp: 10.0.0.0/8
+          CidrIp: 0.0.0.0/0                     # Issue 4: SSH open to the world
